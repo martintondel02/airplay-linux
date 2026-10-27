@@ -5,18 +5,11 @@ A GNOME top bar indicator and a small desktop app for
 mirroring *sender* for Linux. Mirror a Fedora Wayland desktop to an Apple TV
 without touching a terminal.
 
-```
-┌─ top bar ─────────────────────────────────────────┐
-│  🖥  →  Not mirroring · 12 Mbps, 30 fps            │
-│         Living Room · 192.168.1.169               │
-│         ─────────────────────────────             │
-│         Start mirroring                           │
-│         Pair with Apple TV…                       │
-│         Quality ▸   High 12 / Balanced 8 / 4 Mbps │
-│                     30 fps / 60 fps               │
-│         Set Apple TV address…                     │
-└───────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="docs/topbar.png" alt="The Doubletake menu open in the GNOME top bar, showing streaming state, device, start/stop, pair and quality submenu" width="760">
+</p>
+
+<p align="center"><em>UI illustration — the real menu is drawn by GNOME and follows your theme.</em></p>
 
 ## What this adds
 
@@ -113,6 +106,10 @@ Launch **Doubletake** from the app grid, or:
 ```sh
 doubletake-gui
 ```
+
+<p align="center">
+  <img src="docs/app.png" alt="The Doubletake desktop window: status, start button, pair, quality rows, address and log" width="360">
+</p>
 
 ### Command line
 
