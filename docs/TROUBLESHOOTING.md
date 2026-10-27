@@ -30,7 +30,31 @@ If you want the VA path (for a hardware encoder) and it breaks, set
 ## The top bar icon does not appear
 
 GNOME only scans for new extensions **at session start**. Log out and back in
-once after installing.
+once after installing — a real log out, not a screen lock or suspend:
+
+```sh
+gnome-session-quit --logout
+```
+
+Two things commonly fool people here:
+
+- **The Extensions app already lists "Doubletake AirPlay".** That app reads the
+  folder on disk (`~/.local/share/gnome-shell/extensions/`), while the running
+  Shell reads its own loaded list. Toggling it there does nothing until the
+  Shell restarts — it is calling a D-Bus method for a UUID the Shell has never
+  scanned.
+- **The session never actually restarted.** Compare the Shell start time with
+  your login time:
+
+  ```sh
+  ps -eo lstart,args | grep '[g]nome-shell --mode=user'
+  who
+  ```
+
+  If both still show yesterday's boot, the extension cannot possibly be loaded.
+
+After logging back in, `gnome-extensions info doubletake@local` must report
+`State: ENABLED` and `Active: yes`.
 
 If it is still missing:
 

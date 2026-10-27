@@ -1,9 +1,14 @@
-# Doubletake AirPlay
+# Mirror a Linux desktop to an Apple TV over AirPlay
 
-A GNOME top bar indicator and a small desktop app for
-[**doubletake**](https://github.com/omarroth/doubletake) — the AirPlay screen
-mirroring *sender* for Linux. Mirror a Fedora Wayland desktop to an Apple TV
-without touching a terminal.
+**AirPlay screen mirroring from Linux to an Apple TV** — a GNOME top bar
+indicator and a small desktop app, built on
+[doubletake](https://github.com/omarroth/doubletake), the AirPlay *sender* for
+Linux. Cast your Fedora / GNOME (Wayland) desktop to an Apple TV 4K or HD the way
+a Mac would: whole screen, with audio, no cable and no dongle.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT%20%2B%20LGPL--3.0-blue.svg)](LICENSE)
+[![Platform: Fedora + GNOME](https://img.shields.io/badge/platform-Fedora%2044%20%C2%B7%20GNOME%2050-0a6fbf.svg)](#requirements)
+[![AirPlay 2](https://img.shields.io/badge/protocol-AirPlay%202-2ea44f.svg)](#faq)
 
 <p align="center">
   <img src="docs/topbar.png" alt="The Doubletake menu open in the GNOME top bar, showing streaming state, device, start/stop, pair and quality submenu" width="760">
@@ -70,6 +75,17 @@ missing. Options:
 Then **log out and back in once**. GNOME only scans for new Shell extensions at
 session start, so the top bar icon appears after the next login. Until then use
 `doubletake-gui`.
+
+> [!IMPORTANT]
+> Locking the screen, suspending, or toggling the extension in the Extensions app
+> does **not** load it — the running Shell has to be restarted. On Wayland that
+> means a real log out and log in (`gnome-session-quit --logout`); there is no
+> `Alt`+`F2` `r` shortcut any more. Verify with
+> `gnome-extensions info doubletake@local`.
+>
+> The Extensions app may list the extension *before* this, because it reads the
+> folder on disk while the Shell reads its own loaded list — that mismatch is the
+> most common "it's installed but there is no icon" report.
 
 ## Pairing (one time)
 
@@ -169,6 +185,66 @@ Both front ends spawn the CLI and parse its log lines (`mirror session ready`,
 Don't start a stream from both front ends at once — each owns its own
 `doubletake` process.
 
+## FAQ
+
+### Does AirPlay work on Linux?
+
+Yes, in both directions, with different tools:
+
+- **Sending (Linux → Apple TV)** — what this project does. `doubletake`
+  implements the AirPlay 2 mirroring sender: FairPlay, SRP pairing, H.264/HEVC,
+  encrypted video. Point it at an Apple TV and your desktop appears there.
+- **Receiving (iPhone/Mac → Linux)** — [UxPlay](https://github.com/FDH2/UxPlay)
+  or [shairport-sync](https://github.com/mikebrady/shairport-sync) make a Linux
+  box pretend to be an Apple TV.
+
+### How do I cast or mirror from Linux to an Apple TV?
+
+Three commands, once per TV:
+
+```sh
+./install.sh                                    # build + install
+avahi-browse -rtp _airplay._tcp | grep '=;'     # find the TV
+doubletake -target 192.168.1.169 -pair          # enter the PIN shown on screen
+```
+
+After that it is one click in the top bar, one button in the app, or
+`doubletake -target <ip>`.
+
+### Can I mirror the whole screen, or only videos?
+
+The whole desktop, like AirPlay Mirroring on macOS — every window, the pointer,
+and system audio. It is screen *mirroring*, not the "cast this one video" AirPlay
+mode that players like VLC use.
+
+### What about audio?
+
+Screen audio goes out as ALAC via PipeWire/PulseAudio. If the receiver refuses
+the advertised format, `-no-audio` keeps video running.
+
+### Which Linux distributions and desktops work?
+
+The capture path is **Wayland with `xdg-desktop-portal`** (GNOME, KDE, and other
+compositors) or **X11**. This repo's installer, top bar indicator and guides are
+written and tested for **Fedora + GNOME** (`doubletake` itself is distro-agnostic;
+the AUR packages cover Arch).
+
+### Is this an AirPlay receiver?
+
+No. It does not turn your laptop into an Apple TV — it turns your laptop into a
+*sender*. Use UxPlay if you want the other direction.
+
+### Why do I need `doubletake` as well?
+
+Because it is the hard part: the AirPlay 2 protocol, FairPlay key exchange and the
+GStreamer capture/encode pipeline. This repo adds the desktop layer — installer,
+settings, top bar UI, app — and one patch for a capture bug on AMD/Mesa.
+
+### Can I use it without GNOME?
+
+Yes: `doubletake` is a normal CLI, and the GTK4 app works on any desktop with
+`libadwaita`. Only the top bar indicator is GNOME-specific.
+
 ## Troubleshooting
 
 See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md). The two classics:
@@ -196,10 +272,18 @@ MIT for this repository's own code (indicator, app, scripts). The patch in
 is **LGPL-3.0-or-later**, so that patch is LGPL-3.0-or-later as well. No part of
 doubletake is redistributed here — the installer builds it from upstream source.
 
-## Credits
+## Credits and related projects
 
 - [omarroth/doubletake](https://github.com/omarroth/doubletake) — the actual
   AirPlay sender (FairPlay, SRP pairing, H.264/HEVC pipeline)
-- [UxPlay](https://github.com/FDH2/UxPlay) and the AirPlay reverse-engineering
-  community, which doubletake builds on
-- GNOME Shell and libadwaita
+- [UxPlay](https://github.com/FDH2/UxPlay) — AirPlay *receiver* for Linux
+- [shairport-sync](https://github.com/mikebrady/shairport-sync) — AirPlay audio
+  receiver
+- [pyatv](https://github.com/postlund/pyatv) — control Apple TV / AirPlay devices
+  from Python (`atvremote`)
+- [GNOME Shell](https://gitlab.gnome.org/GNOME/gnome-shell) and libadwaita
+
+Search terms this project is meant to answer: *airplay linux*, *airplay 2 linux*,
+*mirror linux to apple tv*, *cast linux screen to apple tv*, *airplay sender
+linux*, *screen mirroring apple tv from fedora*, *gnome airplay*, *wayland screen
+mirroring to apple tv*.
