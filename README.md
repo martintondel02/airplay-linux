@@ -34,7 +34,8 @@ Nothing is installed system-wide, no root, no daemon, no background service.
 ## Requirements
 
 - Fedora with GNOME on **Wayland** (developed against Fedora 44 / GNOME 50, GStreamer 1.28)
-- An Apple TV (or AirPlay-2-capable TV) on the same network
+- An Apple TV (or AirPlay-2-capable TV) on the same network — verified against an
+  Apple TV 4K, 3rd gen (`AppleTV14,1`, tvOS 27)
 - GStreamer + `pactl`:
 
 ```sh
