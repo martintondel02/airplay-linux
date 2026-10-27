@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install Doubletake GNOME: a top bar indicator + desktop GUI for
+# Install Doubletake AirPlay: a top bar indicator + desktop GUI for
 # https://github.com/omarroth/doubletake, built from source on Fedora.
 #
 # Everything lands in your home directory:
@@ -142,7 +142,7 @@ install -m 755 "$here/.build/doubletake" "$LIBEXEC_DIR/doubletake"
 
 cat > "$BIN_DIR/doubletake" <<'WRAPPER'
 #!/bin/sh
-# Wrapper installed by "Doubletake GNOME" — see the README.
+# Wrapper installed by "Doubletake AirPlay" — see the README.
 #
 # 1. Capture path: some Mesa/GStreamer combinations (notably AMD radeonsi with
 #    GStreamer 1.28) start the VA postprocessor pipeline and then lose the

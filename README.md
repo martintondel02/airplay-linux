@@ -1,4 +1,4 @@
-# Doubletake GNOME
+# Doubletake AirPlay
 
 A GNOME top bar indicator and a small desktop app for
 [**doubletake**](https://github.com/omarroth/doubletake) — the AirPlay screen
@@ -60,8 +60,8 @@ gst-inspect-1.0 pipewiresrc  >/dev/null && echo ok
 ## Install
 
 ```sh
-git clone https://github.com/<you>/doubletake-gnome.git
-cd doubletake-gnome
+git clone https://github.com/martintondel02/doubletake-airplay.git
+cd doubletake-airplay
 ./install.sh
 ```
 
