@@ -274,7 +274,7 @@ class DoubletakeIndicator extends PanelMenu.Button {
             }
         } else if (line.includes('pairing complete')) {
             Main.notify('Doubletake', 'Pairing complete');
-            this._setStatus('Paired', 'emblem-ok-symbolic');
+            this._setStatus('Paired', 'object-select-symbolic');
         } else if (line.includes('mirror session ready')) {
             this._state = 'streaming';
             this._setError('');
