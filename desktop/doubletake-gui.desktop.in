@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Doubletake
+GenericName=AirPlay Mirroring
+Comment=Mirror this desktop to an Apple TV
+Exec=@GUI@
+Icon=video-display
+Terminal=false
+Categories=AudioVideo;Network;
+Keywords=airplay;apple tv;mirror;cast;doubletake;
+StartupNotify=true

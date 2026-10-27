@@ -1,0 +1,44 @@
+diff --git a/internal/airplay/capture.go b/internal/airplay/capture.go
+index 13bc64d..74ce631 100644
+--- a/internal/airplay/capture.go
++++ b/internal/airplay/capture.go
+@@ -1043,14 +1043,16 @@ func vaPostprocSystemFormat(encoderFormat string) (string, bool) {
+ 
+ func waylandCapturePlans(encoder encoderResult, hasElement func(string) bool) []waylandCapturePlan {
+ 	plans := make([]waylandCapturePlan, 0, 2)
+-	if canBuildVAWaylandVideoPipeline(encoder, hasElement) {
+-		plans = append(plans, waylandCapturePlan{encoder: encoder, mode: waylandPipelineVAMemory})
+-	} else if canBuildVAPostprocPlainRawWaylandVideoPipeline(encoder, hasElement) {
+-		// Scale while the frame is still handled by the VA postprocessor, then
+-		// request fresh plain-raw output suitable for a software, NVENC, or
+-		// Vulkan encoder. Runtime validation falls back below when a driver
+-		// cannot import the portal's DMA-BUF or map its new output.
+-		plans = append(plans, waylandCapturePlan{encoder: encoder, mode: waylandPipelineVAPostprocPlainRaw})
++	if !vaScalingDisabled() {
++		if canBuildVAWaylandVideoPipeline(encoder, hasElement) {
++			plans = append(plans, waylandCapturePlan{encoder: encoder, mode: waylandPipelineVAMemory})
++		} else if canBuildVAPostprocPlainRawWaylandVideoPipeline(encoder, hasElement) {
++			// Scale while the frame is still handled by the VA postprocessor, then
++			// request fresh plain-raw output suitable for a software, NVENC, or
++			// Vulkan encoder. Runtime validation falls back below when a driver
++			// cannot import the portal's DMA-BUF or map its new output.
++			plans = append(plans, waylandCapturePlan{encoder: encoder, mode: waylandPipelineVAPostprocPlainRaw})
++		}
+ 	}
+ 	// vah264enc accepts both VAMemory and ordinary NV12. A failed VA import
+ 	// can therefore fall back to a CPU-owned frame without changing the selected
+@@ -1059,6 +1061,14 @@ func waylandCapturePlans(encoder encoderResult, hasElement func(string) bool) []
+ 	return plans
+ }
+ 
++// vaScalingDisabled reports whether the operator asked to skip the VA
++// postprocessor capture plans. Some AMD/Mesa drivers import the portal's
++// DMA-BUF, start streaming, and then lose the pipeline a couple of seconds in;
++// the system-memory plan avoids that path at the cost of a CPU copy.
++func vaScalingDisabled() bool {
++	return os.Getenv("DOUBLETAKE_DISABLE_VA_SCALING") != ""
++}
++
+ // systemMemoryStagingFormat deliberately differs from every encoder input
+ // format we select. Requiring that intermediate layout prevents videoconvert
+ // from passing through an already matching PipeWire buffer; the second

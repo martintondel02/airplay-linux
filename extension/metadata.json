@@ -1,0 +1,7 @@
+{
+  "uuid": "doubletake@local",
+  "name": "Doubletake AirPlay",
+  "description": "Mirror this desktop to an Apple TV using doubletake. Start/stop streaming, pair, and pick quality from the top bar.",
+  "shell-version": ["50"],
+  "version": 1
+}

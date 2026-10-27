@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+"""Minimal GUI for doubletake (AirPlay sender).
+
+Controls the `doubletake` CLI: start/stop mirroring, pair with a PIN shown on
+the Apple TV, and pick bitrate / frame rate. Shares its settings with the
+GNOME Shell top bar extension (~/.config/doubletake/shell.json).
+"""
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, GLib, Gtk  # noqa: E402
+
+HOME = Path.home()
+BINARY = HOME / ".local" / "bin" / "doubletake"
+CONFIG_PATH = Path(GLib.get_user_config_dir()) / "doubletake" / "shell.json"
+ZENITY = "/usr/bin/zenity"
+
+DEFAULTS = {"target": "192.168.1.169", "name": "", "bitrate": 12000, "fps": 30}
+BITRATES = [12000, 8000, 4000]
+FPS = [30, 60]
+
+
+def load_config():
+    try:
+        data = json.loads(CONFIG_PATH.read_text())
+    except Exception:
+        data = {}
+    return {**DEFAULTS, **data}
+
+
+def save_config(cfg):
+    try:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+    except Exception as exc:  # pragma: no cover - best effort
+        print(f"doubletake-gui: cannot save config: {exc}", file=sys.stderr)
+
+
+class Window(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Doubletake")
+        self.set_default_size(460, 560)
+        self.cfg = load_config()
+        self.proc = None
+        self.reader = None
+        self._pin_requested = False
+        self._tail = ""
+
+        toolbar = Adw.ToolbarView()
+        header = Adw.HeaderBar()
+        toolbar.add_top_bar(header)
+        self.set_content(toolbar)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        box.set_margin_top(24)
+        box.set_margin_bottom(24)
+        box.set_margin_start(18)
+        box.set_margin_end(18)
+
+        self.status = Gtk.Label(label="Not mirroring", xalign=0)
+        self.status.add_css_class("title-1")
+        box.append(self.status)
+
+        self.detail = Gtk.Label(label=self._device_label(), xalign=0)
+        self.detail.add_css_class("dim-label")
+        box.append(self.detail)
+
+        self.toggle = Gtk.Button(label="Start mirroring")
+        self.toggle.add_css_class("suggested-action")
+        self.toggle.add_css_class("pill")
+        self.toggle.set_size_request(-1, 48)
+        self.toggle.connect("clicked", self.on_toggle)
+        box.append(self.toggle)
+
+        pair = Gtk.Button(label="Pair with Apple TV…")
+        pair.connect("clicked", self.on_pair)
+        box.append(pair)
+
+        group = Adw.PreferencesGroup(title="Quality")
+        box.append(group)
+
+        self.bitrate_row = Adw.ComboRow(title="Bitrate")
+        self.bitrate_row.set_model(Gtk.StringList.new(
+            [f"{b // 1000} Mbps" for b in BITRATES]))
+        self.bitrate_row.set_selected(BITRATES.index(self.cfg["bitrate"])
+                                      if self.cfg["bitrate"] in BITRATES else 0)
+        self.bitrate_row.connect("notify::selected", self.on_quality)
+        group.add(self.bitrate_row)
+
+        self.fps_row = Adw.ComboRow(title="Frame rate")
+        self.fps_row.set_model(Gtk.StringList.new([f"{f} fps" for f in FPS]))
+        self.fps_row.set_selected(FPS.index(self.cfg["fps"])
+                                  if self.cfg["fps"] in FPS else 0)
+        self.fps_row.connect("notify::selected", self.on_quality)
+        group.add(self.fps_row)
+
+        self.address_row = Adw.EntryRow(title="Apple TV address")
+        self.address_row.set_text(self.cfg["target"])
+        self.address_row.connect("changed", self.on_address)
+        group.add(self.address_row)
+
+        expander = Gtk.Expander(label="Log")
+        self.log_view = Gtk.TextView(editable=False, monospace=True)
+        self.log_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        log_scroll = Gtk.ScrolledWindow()
+        log_scroll.set_child(self.log_view)
+        log_scroll.set_min_content_height(140)
+        self.log_buffer = self.log_view.get_buffer()
+        expander.set_child(log_scroll)
+        expander.set_expanded(False)
+        box.append(expander)
+
+        toolbar.set_content(box)
+
+    # ------------------------------------------------------------------ state
+    def _device_label(self):
+        name = self.cfg.get("name") or ""
+        return f"{name} · {self.cfg['target']}" if name else self.cfg["target"]
+
+    def _append_log(self, text):
+        end = self.log_buffer.get_end_iter()
+        self.log_buffer.insert(end, text)
+
+    def _set_status(self, text, detail=None):
+        self.status.set_label(text)
+        if detail is not None:
+            self.detail.set_label(detail)
+
+    def _set_error(self, text):
+        self.status.set_label("Error")
+        self.status.remove_css_class("title-1")
+        self.detail.set_label(text)
+        self.detail.remove_css_class("dim-label")
+        self.detail.add_css_class("error")
+
+    # ----------------------------------------------------------------- events
+    def on_quality(self, *_):
+        self.cfg["bitrate"] = BITRATES[self.bitrate_row.get_selected()]
+        self.cfg["fps"] = FPS[self.fps_row.get_selected()]
+        save_config(self.cfg)
+        if self.proc is None:
+            self._set_status("Not mirroring", self._device_label())
+
+    def on_address(self, row):
+        self.cfg["target"] = row.get_text().strip()
+        save_config(self.cfg)
+        self._set_status(self.status.get_label(), self._device_label())
+
+    def on_toggle(self, *_):
+        if self.proc is not None:
+            self.stop()
+            return
+        self.start([])
+
+    def on_pair(self, *_):
+        self.stop()
+        self.start(["-pair"])
+
+    # -------------------------------------------------------------- processes
+    def start(self, extra):
+        if self.proc is not None:
+            return
+        argv = [
+            str(BINARY),
+            "-target", self.cfg["target"],
+            "-bitrate", str(self.cfg["bitrate"]),
+            "-fps", str(self.cfg["fps"]),
+            *extra,
+        ]
+        self.log_buffer.set_text("")
+        self._tail = ""
+        self._pin_requested = False
+        try:
+            self.proc = subprocess.Popen(
+                argv,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                start_new_session=True,
+            )
+        except Exception as exc:
+            self.proc = None
+            self._set_error(f"Could not start doubletake: {exc}")
+            return
+
+        pairing = "-pair" in extra
+        self._set_status("Pairing…" if pairing else "Starting…", self._device_label())
+        self.toggle.set_label("Stop mirroring")
+        self.toggle.remove_css_class("suggested-action")
+        self.toggle.add_css_class("destructive-action")
+
+        self.reader = threading.Thread(target=self._read_loop, daemon=True)
+        self.reader.start()
+
+    def _read_loop(self):
+        proc = self.proc
+        assert proc is not None and proc.stdout is not None
+        for line in proc.stdout:
+            GLib.idle_add(self._handle_line, line)
+        code = proc.wait()
+        GLib.idle_add(self._on_exit, code)
+
+    def _handle_line(self, line):
+        self._append_log(line)
+        self._tail = (self._tail + line)[-8000:]
+        if not self._pin_requested and "PIN shown on the receiver" in self._tail:
+            self._prompt_pin()
+
+        text = line.strip()
+        if "connected to:" in text:
+            name = text.split("connected to: ", 1)[-1].split(" (model:")[0]
+            self.cfg["name"] = name
+            save_config(self.cfg)
+            self._set_status(self.status.get_label(), self._device_label())
+        elif "mirror session ready" in text:
+            self._set_status("Mirroring", self._device_label())
+        elif "pairing complete" in text:
+            self._set_status("Paired", self._device_label())
+        elif "mirror setup failed" in text or "streaming error" in text:
+            self._set_error(text)
+        return GLib.SOURCE_REMOVE
+
+    def _prompt_pin(self):
+        self._pin_requested = True
+        threading.Thread(target=self._ask_pin, daemon=True).start()
+
+    def _ask_pin(self):
+        try:
+            pin = subprocess.run(
+                [ZENITY, "--entry", "--title=Pair with Apple TV",
+                 "--text=Enter the PIN shown on your Apple TV",
+                 "--ok-label=Pair"],
+                capture_output=True, text=True, timeout=180,
+            ).stdout.strip()
+        except Exception:
+            pin = ""
+        GLib.idle_add(self._send_pin, pin)
+
+    def _send_pin(self, pin):
+        if not pin:
+            self.stop()
+            return GLib.SOURCE_REMOVE
+        proc = self.proc
+        try:
+            if proc and proc.stdin:
+                proc.stdin.write(pin + "\n")
+                proc.stdin.flush()
+        except Exception as exc:
+            self._set_error(f"Could not send PIN: {exc}")
+            self.stop()
+        return GLib.SOURCE_REMOVE
+
+    def _on_exit(self, code):
+        if self.proc is None:
+            return GLib.SOURCE_REMOVE
+        self.proc = None
+        self.toggle.set_label("Start mirroring")
+        self.toggle.remove_css_class("destructive-action")
+        self.toggle.add_css_class("suggested-action")
+        if code not in (0, -signal.SIGINT, -signal.SIGTERM):
+            self._append_log(f"\n[exited with status {code}]\n")
+        if self.status.get_label() not in ("Error",):
+            self._set_status("Not mirroring", self._device_label())
+        return GLib.SOURCE_REMOVE
+
+    def stop(self):
+        proc = self.proc
+        if proc is None:
+            return
+        self.proc = None
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+        except Exception:
+            try:
+                proc.send_signal(signal.SIGINT)
+            except Exception:
+                pass
+        threading.Timer(2.0, lambda: proc.poll() is None and proc.kill()).start()
+        self.toggle.set_label("Start mirroring")
+        self.toggle.remove_css_class("destructive-action")
+        self.toggle.add_css_class("suggested-action")
+        self._set_status("Not mirroring", self._device_label())
+
+
+class App(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id="io.github.martintondel.Doubletake")
+        self.window = None
+
+    def do_activate(self):
+        if self.window is None:
+            self.window = Window(self)
+        self.window.present()
+
+    def do_shutdown(self):
+        if self.window is not None:
+            self.window.stop()
+        Adw.Application.do_shutdown(self)
+
+
+if __name__ == "__main__":
+    sys.exit(App().run(sys.argv))
