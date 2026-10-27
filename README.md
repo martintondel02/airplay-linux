@@ -59,8 +59,8 @@ gst-inspect-1.0 pipewiresrc  >/dev/null && echo ok
 ## Install
 
 ```sh
-git clone https://github.com/martintondel02/doubletake-airplay.git
-cd doubletake-airplay
+git clone https://github.com/martintondel02/airplay-linux.git
+cd airplay-linux
 ./install.sh
 ```
 
